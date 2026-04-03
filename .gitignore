@@ -1,7 +1,6 @@
 # Local result / debug artifacts
 *.json
 *.log
-*.txt
 *_result.json
 inference_out*.txt
 easy_result.json

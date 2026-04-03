@@ -1,0 +1,8 @@
+flask
+flask-cors
+pyyaml
+openai
+openenv-core
+fastapi
+uvicorn[standard]
+
