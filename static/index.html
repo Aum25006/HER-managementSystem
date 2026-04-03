@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hospital ER Management</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f4f6f9;
+        color: #222;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 30px auto;
+        background: #ffffff;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: 24px;
+      }
+
+      .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        gap: 12px;
+      }
+
+      .stats {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .stat-card {
+        background: #f8fafc;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        font-size: 13px;
+      }
+
+      .stat-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+      }
+
+      .stat-value {
+        font-weight: 600;
+        margin-top: 2px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+
+      th,
+      td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #e2e8f0;
+        text-align: left;
+        font-size: 13px;
+      }
+
+      th {
+        background: #f9fafb;
+        font-weight: 600;
+        color: #475569;
+      }
+
+      tr:nth-child(even) td {
+        background: #f9fafb;
+      }
+
+      tr.treated td {
+        color: #64748b;
+      }
+
+      tr.selected {
+        outline: 2px solid #2563eb;
+        outline-offset: -2px;
+      }
+
+      .severity-badge {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #0f172a;
+      }
+
+      .sev-low {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .sev-mid {
+        background: #fef9c3;
+        color: #854d0e;
+      }
+
+      .sev-high {
+        background: #fee2e2;
+        color: #b91c1c;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      button {
+        border-radius: 999px;
+        border: none;
+        padding: 8px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+      }
+
+      button.primary {
+        background: #2563eb;
+        color: white;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+      }
+
+      button.secondary {
+        background: #e2e8f0;
+        color: #1e293b;
+      }
+
+      button.danger {
+        background: #f97373;
+        color: #111827;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+        box-shadow: none;
+      }
+
+      button:not(:disabled):active {
+        transform: translateY(1px);
+        box-shadow: none;
+      }
+
+      .status-bar {
+        margin-top: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        font-size: 13px;
+      }
+
+      .badge {
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .badge-success {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .badge-warning {
+        background: #fef9c3;
+        color: #854d0e;
+      }
+
+      .badge-neutral {
+        background: #e2e8f0;
+        color: #1e293b;
+      }
+
+      .message {
+        margin-top: 4px;
+        font-size: 12px;
+        color: #6b7280;
+      }
+
+      .task-select {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      select {
+        padding: 5px 8px;
+        border-radius: 999px;
+        border: 1px solid #cbd5f4;
+        font-size: 13px;
+        background: white;
+      }
+
+      @media (max-width: 700px) {
+        .top-bar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="top-bar">
+        <div>
+          <h1>Hospital ER Management</h1>
+          <div class="message">
+            Choose a patient from the dropdown, then click <strong>Assign Doctor</strong> or
+            <strong>Move to ICU</strong>, or click <strong>Wait</strong>.
+          </div>
+        </div>
+        <div class="task-select">
+          <span>Task:</span>
+          <select id="taskSelect">
+            <option value="easy">Easy – highest severity first</option>
+            <option value="medium">Medium – manage resources</option>
+            <option value="hard">Hard – optimize waits &amp; efficiency</option>
+          </select>
+          <button class="secondary" id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">Available Doctors</div>
+          <div class="stat-value" id="statDoctors">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Available ICU Beds</div>
+          <div class="stat-value" id="statIcuBeds">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Step</div>
+          <div class="stat-value" id="statStep">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Last Reward</div>
+          <div class="stat-value" id="statReward">-</div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Patient ID</th>
+            <th>Severity</th>
+            <th>Wait Time</th>
+            <th>Treated</th>
+          </tr>
+        </thead>
+        <tbody id="patientsBody"></tbody>
+      </table>
+
+      <div class="task-select" style="margin-top: 16px;">
+        <span>Patient ID:</span>
+        <select id="patientSelect"></select>
+      </div>
+
+      <div class="controls">
+        <button class="primary" id="assignBtn">Assign Doctor</button>
+        <button class="secondary" id="icuBtn">Move to ICU</button>
+        <button class="secondary" id="waitBtn">Wait</button>
+        <button class="danger" id="gradeBtn">Grade Episode</button>
+      </div>
+
+      <div class="status-bar">
+        <span id="episodeStatus" class="badge badge-neutral">Episode running</span>
+        <span id="gradeStatus" class="badge badge-neutral">Score: -</span>
+      </div>
+      <div id="infoMessage" class="message"></div>
+    </div>
+
+    <script>
+      const patientsBody = document.getElementById("patientsBody");
+      const statDoctors = document.getElementById("statDoctors");
+      const statIcuBeds = document.getElementById("statIcuBeds");
+      const statStep = document.getElementById("statStep");
+      const statReward = document.getElementById("statReward");
+      const episodeStatus = document.getElementById("episodeStatus");
+      const gradeStatus = document.getElementById("gradeStatus");
+      const infoMessage = document.getElementById("infoMessage");
+      const taskSelect = document.getElementById("taskSelect");
+      const patientSelect = document.getElementById("patientSelect");
+
+      const assignBtn = document.getElementById("assignBtn");
+      const icuBtn = document.getElementById("icuBtn");
+      const waitBtn = document.getElementById("waitBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const gradeBtn = document.getElementById("gradeBtn");
+
+      let selectedPatientId = null;
+      // No additional local state; UI is driven by backend state.
+
+      function severityClass(sev) {
+        if (sev >= 7) return "sev-high";
+        if (sev >= 4) return "sev-mid";
+        return "sev-low";
+      }
+
+      function severityLabel(sev) {
+        if (sev >= 9) return "Critical";
+        if (sev >= 7) return "High";
+        if (sev >= 4) return "Medium";
+        return "Low";
+      }
+
+      function renderState(data) {
+        const { state, reward, done } = data;
+
+        statDoctors.textContent = state.available_doctors;
+        statIcuBeds.textContent = state.available_beds;
+        statStep.textContent = state.step_count + " / " + state.max_steps;
+        statReward.textContent = reward.toFixed(2);
+
+        episodeStatus.textContent = done ? "Episode finished" : "Episode running";
+        episodeStatus.className = "badge " + (done ? "badge-warning" : "badge-neutral");
+
+        if (done) {
+          infoMessage.textContent = "Episode finished";
+        }
+
+        assignBtn.disabled = done;
+        icuBtn.disabled = done;
+        waitBtn.disabled = done;
+        patientSelect.disabled = done;
+        taskSelect.disabled = done;
+        resetBtn.disabled = done;
+        gradeBtn.disabled = done;
+
+        // Update patient dropdown from backend state (no static UI data).
+        const patients = state.patients || [];
+        patientSelect.innerHTML = "";
+        selectedPatientId = null;
+
+        patients.forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.treated ? `${p.id} (Treated)` : `${p.id}`;
+          if (p.treated) opt.disabled = true;
+          patientSelect.appendChild(opt);
+        });
+
+        // If there are untreated patients, select the first one by default.
+        const firstEnabled = Array.from(patientSelect.options).find((o) => !o.disabled);
+        if (firstEnabled) {
+          patientSelect.value = firstEnabled.value;
+          selectedPatientId = parseInt(firstEnabled.value, 10);
+        }
+
+        patientsBody.innerHTML = "";
+        (state.patients || []).forEach((p) => {
+          const tr = document.createElement("tr");
+          if (p.treated) tr.classList.add("treated");
+
+          const sevClass = severityClass(p.severity);
+          const sevLabel = severityLabel(p.severity);
+
+          tr.innerHTML = `
+            <td>${p.id}</td>
+            <td><span class="severity-badge ${sevClass}">${p.severity} – ${sevLabel}</span></td>
+            <td>${p.wait_time}</td>
+            <td>${p.treated ? "true" : "false"}</td>
+          `;
+          patientsBody.appendChild(tr);
+        });
+      }
+
+      async function fetchState() {
+        try {
+          const res = await fetch("http://127.0.0.1:5000/state");
+          const data = await res.json();
+          renderState(data);
+        } catch (e) {
+          console.error(e);
+          infoMessage.textContent = "Error fetching state.";
+        }
+      }
+
+      async function sendStep(type, patientId = null) {
+        infoMessage.textContent = "";
+        try {
+          const action = { type, patient_id: patientId };
+          const res = await fetch("http://127.0.0.1:5000/step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(action),
+          });
+          const data = await res.json();
+          if (data.info && data.info.reason) {
+            infoMessage.textContent = data.info.reason;
+          }
+          renderState(data);
+        } catch (e) {
+          console.error(e);
+          infoMessage.textContent = "Error sending action.";
+        }
+      }
+
+      async function resetEnv() {
+        infoMessage.textContent = "";
+        gradeStatus.textContent = "Score: -";
+        gradeStatus.className = "badge badge-neutral";
+        selectedPatientId = null;
+        try {
+          const res = await fetch("http://127.0.0.1:5000/reset", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task: taskSelect.value }),
+          });
+          const data = await res.json();
+          renderState(data);
+        } catch (e) {
+          console.error(e);
+          infoMessage.textContent = "Error resetting environment.";
+        }
+      }
+
+      async function gradeEpisode() {
+        try {
+          const res = await fetch("http://127.0.0.1:5000/grade", { method: "POST" });
+          const data = await res.json();
+          const score = data.score ?? 0;
+          gradeStatus.textContent = "Score: " + score.toFixed(2);
+          gradeStatus.className = "badge badge-success";
+        } catch (e) {
+          console.error(e);
+          infoMessage.textContent = "Error grading episode.";
+        }
+      }
+
+      patientSelect.addEventListener("change", () => {
+        const raw = patientSelect.value;
+        if (raw === "" || raw === null || raw === undefined) {
+          selectedPatientId = null;
+          return;
+        }
+        selectedPatientId = parseInt(raw, 10);
+      });
+
+      assignBtn.addEventListener("click", () => {
+        if (selectedPatientId === null) {
+          infoMessage.textContent = "Select a patient first.";
+          return;
+        }
+        sendStep("assign_doctor", selectedPatientId);
+      });
+
+      icuBtn.addEventListener("click", () => {
+        if (selectedPatientId === null) {
+          infoMessage.textContent = "Select a patient first.";
+          return;
+        }
+        sendStep("move_to_icu", selectedPatientId);
+      });
+
+      waitBtn.addEventListener("click", () => {
+        sendStep("wait", null);
+      });
+
+      resetBtn.addEventListener("click", () => {
+        resetEnv();
+      });
+
+      gradeBtn.addEventListener("click", () => {
+        gradeEpisode();
+      });
+
+      // Initial load
+      (async () => {
+        await resetEnv();
+        await fetchState();
+      })();
+    </script>
+  </body>
+  </html>
+

@@ -1,0 +1,24 @@
+# Local result / debug artifacts
+*.json
+*.log
+*.txt
+*_result.json
+inference_out*.txt
+easy_result.json
+medium_result.json
+hard_result.json
+
+# Python caches / virtual envs
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# Build artifacts
+.DS_Store
+
+# Cursor / editor
+.cursor/
+.vscode/
+!.vscode/settings.json
+

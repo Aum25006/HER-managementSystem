@@ -1,0 +1,77 @@
+name: hospital-er-management
+description: >
+  Simple Hospital Emergency Room Management environment for OpenEnv-style agents.
+  Agents manage patients, doctors, and ICU beds to maximize reward by treating
+  high-severity patients quickly and efficiently.
+
+observation_space:
+  description: >
+    JSON object with current patients and resources.
+  type: object
+  properties:
+    patients:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: integer
+          severity:
+            type: integer
+            minimum: 1
+            maximum: 10
+          wait_time:
+            type: integer
+          treated:
+            type: boolean
+          in_icu:
+            type: boolean
+    available_doctors:
+      type: integer
+      minimum: 0
+    available_beds:
+      type: integer
+      minimum: 0
+
+action_space:
+  description: >
+    JSON action dict with type and patient_id.
+  type: object
+  properties:
+    type:
+      type: string
+      enum: ["assign_doctor", "move_to_icu", "wait"]
+    patient_id:
+      description: >
+        Identifier of the target patient. May be null for 'wait' actions.
+      oneOf:
+        - type: integer
+        - type: "null"
+
+reward_description: |
+  Reward shaping:
+    +10 for treating high-severity patients (severity >= 7).
+    +5 for treating medium-severity patients (4-6).
+    -2 for misusing ICU on low-severity cases.
+    -5 if any patient wait_time > 5.
+    -10 for treating low-severity patients (<= 3) while a higher-severity patient (>= 7)
+        remains untreated.
+    +2 for efficient use of resources (a valid treatment action).
+    Small negative rewards for idle or invalid actions (e.g. `wait`).
+
+done_condition: |
+  Episode ends when:
+    - All patients are treated, OR
+    - The maximum step limit (50) is reached.
+
+tasks:
+  easy:
+    description: "Treat highest severity patients first."
+    objective: "Always select the highest severity untreated patient."
+  medium:
+    description: "Manage doctors and ICU beds effectively."
+    objective: "Balance use of doctors and ICU beds while prioritizing critical patients."
+  hard:
+    description: "Optimize wait time, prioritization, and resource efficiency."
+    objective: "Minimize average wait time while maximizing overall reward."
+

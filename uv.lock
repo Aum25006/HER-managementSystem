@@ -1,0 +1,4 @@
+# Placeholder uv.lock
+# The OpenEnv validator expects this file to exist.
+# If you have `uv` installed, you can regenerate it via `uv lock`.
+

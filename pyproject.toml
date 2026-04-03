@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hospital-er-management"
+version = "1.0.0"
+description = "Hospital Emergency Room Management OpenEnv environment"
+requires-python = ">=3.11"
+dependencies = [
+  "openenv-core",
+  "openai",
+  "fastapi",
+  "uvicorn[standard]",
+  "flask",
+  "flask-cors",
+  "pyyaml",
+]
+
+[project.scripts]
+server = "server.app:main"
+
