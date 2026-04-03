@@ -1,3 +1,12 @@
+---
+title: Her Management Er
+emoji: 🌍
+colorFrom: purple
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # Hospital ER Management System (OpenEnv)
 
 This project implements a simple Hospital Emergency Room (ER) management environment for the OpenEnv workflow.
