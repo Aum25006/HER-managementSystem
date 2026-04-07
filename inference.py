@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Dict, List
 
 from openai import OpenAI
@@ -87,15 +88,75 @@ def _http_to_ws(url: str) -> str:
     return url
 
 
+def _candidate_base_urls() -> List[str]:
+    """
+    Build candidate base URLs for evaluator environments.
+    """
+    urls: List[str] = []
+
+    # User / evaluator provided endpoints first.
+    for key in ("OPENENV_BASE_URL", "OPENENV_URL", "OPENENV_API_URL", "BASE_URL"):
+        val = os.environ.get(key)
+        if val:
+            urls.append(val.rstrip("/"))
+
+    # Common local defaults used by validators/runtimes.
+    urls.extend(
+        [
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
+            "http://127.0.0.1:7860",
+            "http://localhost:7860",
+        ]
+    )
+
+    # De-duplicate while keeping order
+    dedup: List[str] = []
+    seen = set()
+    for u in urls:
+        if u not in seen:
+            dedup.append(u)
+            seen.add(u)
+    return dedup
+
+
+def _connect_env_sync(max_attempts: int = 2):
+    """
+    Return a connected Sync GenericEnvClient with retries/fallback URLs.
+    Raises only after all attempts fail.
+    """
+    last_exc: Exception | None = None
+    candidates = _candidate_base_urls()
+
+    for base in candidates:
+        ws_base = _http_to_ws(base)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                env = GenericEnvClient(
+                    base_url=ws_base,
+                    connect_timeout_s=3.0,
+                    message_timeout_s=30.0,
+                ).sync()
+                env.connect()
+                return env
+            except Exception as e:  # noqa: BLE001
+                last_exc = e
+                # Short backoff in case endpoint is still booting.
+                time.sleep(0.6 * attempt)
+                continue
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Unable to connect to any environment endpoint")
+
+
 def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
     # Deterministic seeds per task for reproducibility.
     seed_map = {"easy": 1, "medium": 2, "hard": 3}
     seed = seed_map.get(task, 1)
 
-    ws_base_url = _http_to_ws(_env_base_url())
-    env = GenericEnvClient(base_url=ws_base_url).sync()
-
-    with env:
+    env = _connect_env_sync(max_attempts=2)
+    try:
         reset_result = env.reset(seed=seed, task=task)
         observation = reset_result.observation
         done = bool(reset_result.done)
@@ -139,6 +200,11 @@ def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
                     "done": done,
                 }
             )
+    finally:
+        try:
+            env.close()
+        except Exception:
+            pass
 
     final_state = observation
     score = grade({"final_state": final_state, "trajectory": trajectory})
@@ -163,13 +229,37 @@ def main() -> None:
 
     per_task: Dict[str, Any] = {}
     for task in tasks:
-        result = run_task(task, emit_steps=True)
-        per_task[task] = {
-            "score": result["score"],
-            "total_reward": result["total_reward"],
-            "steps": result["steps"],
-            "done": result["done"],
-        }
+        try:
+            result = run_task(task, emit_steps=True)
+            per_task[task] = {
+                "score": result["score"],
+                "total_reward": result["total_reward"],
+                "steps": result["steps"],
+                "done": result["done"],
+            }
+        except Exception as e:  # noqa: BLE001
+            # Never crash the evaluator pipeline due to an unhandled exception.
+            per_task[task] = {
+                "score": 0.0,
+                "total_reward": 0.0,
+                "steps": 0,
+                "done": False,
+                "error": str(e),
+            }
+            print(
+                "[STEP]"
+                + json.dumps(
+                    {
+                        "task": task,
+                        "step": 0,
+                        "action": None,
+                        "reward": 0.0,
+                        "done": False,
+                        "error": str(e),
+                    },
+                    separators=(",", ":"),
+                )
+            )
 
     print("[END]" + json.dumps({"scores": per_task}, separators=(",", ":")))
 
