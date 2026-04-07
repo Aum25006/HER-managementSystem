@@ -14,9 +14,12 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 BENCHMARK = os.getenv("BENCHMARK", "hospital-er-management")
-TASK_NAME = os.getenv("TASK_NAME") or os.getenv("HOSPITAL_TASK", "easy")
+# If unset, run all benchmark tasks (Phase 2 requires ≥3 graded tasks).
+# Set TASK_NAME or HOSPITAL_TASK to run a single task (local debugging).
+TASK_NAME_SINGLE = os.getenv("TASK_NAME") or os.getenv("HOSPITAL_TASK")
 MAX_STEPS = int(os.getenv("MAX_STEPS", "50"))
 EPS = 1e-4
+DEFAULT_TASKS = ["easy", "medium", "hard"]
 
 
 def log_start(task: str, env: str, model: str) -> None:
@@ -140,23 +143,23 @@ def _connect_env_sync(max_attempts: int = 3):
     raise RuntimeError("Unable to connect to environment endpoint")
 
 
-def main() -> None:
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
-    _llm_compliance_call()
+def _run_single_task(task_name: str) -> None:
+    """One graded episode: [START] → [STEP]* → close → [END] (spec-compliant)."""
+    log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
 
     env = None
     rewards: List[float] = []
     trajectory: List[Dict[str, Any]] = []
     steps_taken = 0
-    score = 0.5
+    score = _safe_score(0.5)
     success = False
     done = False
 
     try:
         env = _connect_env_sync(max_attempts=3)
         seed_map = {"easy": 1, "medium": 2, "hard": 3}
-        seed = seed_map.get(TASK_NAME, 1)
-        reset_result = env.reset(seed=seed, task=TASK_NAME)
+        seed = seed_map.get(task_name, 1)
+        reset_result = env.reset(seed=seed, task=task_name)
         observation = observation_to_dict(reset_result.observation)
         done = bool(reset_result.done)
 
@@ -192,7 +195,6 @@ def main() -> None:
         success = bool(done)
 
     except Exception as e:  # noqa: BLE001
-        # Emit one STEP on error to preserve parser expectations.
         log_step(
             step=max(1, steps_taken + 1),
             action="null",
@@ -209,6 +211,18 @@ def main() -> None:
             except Exception:
                 pass
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
+
+def main() -> None:
+    _llm_compliance_call()
+
+    if TASK_NAME_SINGLE:
+        task_list = [TASK_NAME_SINGLE]
+    else:
+        task_list = list(DEFAULT_TASKS)
+
+    for task_name in task_list:
+        _run_single_task(task_name)
 
 
 if __name__ == "__main__":
