@@ -64,17 +64,18 @@ done_condition: |
     - All patients are treated, OR
     - The maximum step limit (50) is reached.
 
+# List form: some automated checks require `tasks` to be a sequence (not a mapping).
 tasks:
-  easy:
+  - id: easy
     description: "Treat highest severity patients first."
     objective: "Always select the highest severity untreated patient."
-    grader: "grader:grade_easy"
-  medium:
+    grader: "grader.grade_easy"
+  - id: medium
     description: "Manage doctors and ICU beds effectively."
     objective: "Balance use of doctors and ICU beds while prioritizing critical patients."
-    grader: "grader:grade_medium"
-  hard:
+    grader: "grader.grade_medium"
+  - id: hard
     description: "Optimize wait time, prioritization, and resource efficiency."
     objective: "Minimize average wait time while maximizing overall reward."
-    grader: "grader:grade_hard"
+    grader: "grader.grade_hard"
 

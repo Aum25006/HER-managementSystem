@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List, Mapping
+from typing import Any, Dict, List, Mapping
 
 EPS = 1e-4
 
@@ -24,6 +24,22 @@ def _as_mapping(obj: Any) -> Dict[str, Any]:
     if isinstance(obj, Mapping):
         return dict(obj)
     raise TypeError(f"Cannot coerce observation to dict: {type(obj)!r}")
+
+
+def observation_to_dict(obj: Any) -> Dict[str, Any]:
+    """Public helper for clients; same as `_as_mapping`."""
+    return _as_mapping(obj)
+
+
+def _action_as_dict(action: Any) -> Dict[str, Any]:
+    if action is None:
+        return {}
+    if isinstance(action, dict):
+        return action
+    try:
+        return _as_mapping(action)
+    except TypeError:
+        return {}
 
 
 def _extract_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -126,7 +142,12 @@ def grade(result: Any) -> float:
         wait_steps = 0
         treat_steps = 0
         for step in trajectory:
-            action = step.get("action", {})
+            if not isinstance(step, dict):
+                try:
+                    step = _as_mapping(step)
+                except TypeError:
+                    continue
+            action = _action_as_dict(step.get("action", {}))
             action_type = action.get("type")
             if action_type == "wait":
                 wait_steps += 1
@@ -168,5 +189,11 @@ def grade_hard(result: Any) -> float:
     return grade(result)
 
 
-__all__ = ["grade", "grade_easy", "grade_medium", "grade_hard"]
+__all__ = [
+    "grade",
+    "grade_easy",
+    "grade_medium",
+    "grade_hard",
+    "observation_to_dict",
+]
 

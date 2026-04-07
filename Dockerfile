@@ -8,9 +8,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY . /app
 
 ENV HOST=0.0.0.0
+ENV PYTHONUNBUFFERED=1
 
 # HF Spaces injects PORT dynamically (typically 7860). Bind to that.
 EXPOSE 7860
 
 CMD ["sh", "-c", "uvicorn server.app:app --host 0.0.0.0 --port ${PORT:-7860}"]
-

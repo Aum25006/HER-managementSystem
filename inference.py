@@ -8,15 +8,22 @@ from typing import Any, Dict, List
 from openai import OpenAI
 from openenv.core import GenericEnvClient
 
-from grader import grade
+from grader import grade, observation_to_dict
 
 EPS = 1e-4
+
+
+def _log(line: str) -> None:
+    """Line-buffered logs for CI harnesses (avoid stuck partial stdout)."""
+    print(line, flush=True)
 
 
 def _emit_score(x: float) -> float:
     """Stable numeric score for JSON: strictly inside (0, 1), no float boundary surprises."""
     x = max(EPS, min(1.0 - EPS, float(x)))
     return round(x, 6)
+
+
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000/v1")
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.environ.get("HF_TOKEN")  # Optional; no default (per checklist)
@@ -162,7 +169,7 @@ def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
     env = _connect_env_sync(max_attempts=2)
     try:
         reset_result = env.reset(seed=seed, task=task)
-        observation = reset_result.observation
+        observation = observation_to_dict(reset_result.observation)
         done = bool(reset_result.done)
 
         trajectory: List[Dict[str, Any]] = []
@@ -173,7 +180,7 @@ def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
             action = _heuristic_action(observation)
             step_result = env.step(action)
 
-            observation = step_result.observation
+            observation = observation_to_dict(step_result.observation)
             reward = float(step_result.reward or 0.0)
             done = bool(step_result.done)
 
@@ -181,7 +188,7 @@ def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
             total_reward += reward
 
             if emit_steps:
-                print(
+                _log(
                     "[STEP]"
                     + json.dumps(
                         {
@@ -199,7 +206,7 @@ def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
                 {
                     "step": steps,
                     "action": action,
-                    "state": observation,
+                    "state": dict(observation),
                     "reward": reward,
                     "done": done,
                 }
@@ -229,7 +236,7 @@ def main() -> None:
 
     _llm_compliance_call()
 
-    print("[START]" + json.dumps({"tasks": tasks}))
+    _log("[START]" + json.dumps({"tasks": tasks}, separators=(",", ":")))
 
     per_task: Dict[str, Any] = {}
     for task in tasks:
@@ -254,7 +261,7 @@ def main() -> None:
                 "done": False,
                 "error": str(e),
             }
-            print(
+            _log(
                 "[STEP]"
                 + json.dumps(
                     {
@@ -269,9 +276,14 @@ def main() -> None:
                 )
             )
 
-    # Validators often require exactly these three task keys at the top level of [END] JSON.
-    end_out: Dict[str, Any] = {t: per_task[t] for t in tasks}
-    print("[END]" + json.dumps(end_out, separators=(",", ":")))
+    # Multiple parsers: explicit task list + scores map + per-task payloads.
+    end_out: Dict[str, Any] = {
+        "tasks": tasks,
+        "task_scores": {t: float(per_task[t]["score"]) for t in tasks},
+    }
+    for t in tasks:
+        end_out[t] = per_task[t]
+    _log("[END]" + json.dumps(end_out, separators=(",", ":")))
 
 
 if __name__ == "__main__":
