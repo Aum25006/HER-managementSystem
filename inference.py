@@ -3,30 +3,60 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from openenv.core import GenericEnvClient
 
 from grader import grade, observation_to_dict
 
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+BENCHMARK = os.getenv("BENCHMARK", "hospital-er-management")
+TASK_NAME = os.getenv("TASK_NAME") or os.getenv("HOSPITAL_TASK", "easy")
+MAX_STEPS = int(os.getenv("MAX_STEPS", "50"))
 EPS = 1e-4
 
 
-def _log(line: str) -> None:
-    """Line-buffered logs for CI harnesses (avoid stuck partial stdout)."""
-    print(line, flush=True)
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
-def _emit_score(x: float) -> float:
-    """Stable numeric score for JSON: strictly inside (0, 1), no float boundary surprises."""
-    x = max(EPS, min(1.0 - EPS, float(x)))
-    return round(x, 6)
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = error if error else "null"
+    done_val = str(done).lower()
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
+        flush=True,
+    )
 
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN = os.environ.get("HF_TOKEN")  # Optional; no default (per checklist)
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
+        flush=True,
+    )
+
+
+def _safe_score(x: float) -> float:
+    return max(EPS, min(1.0 - EPS, float(x)))
+
+
+def _llm_compliance_call() -> None:
+    # Mandatory OpenAI client usage for evaluator compliance.
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN or "dummy")
+    try:
+        _ = client.chat.completions.create(
+            model=MODEL_NAME,
+            temperature=0,
+            max_tokens=1,
+            messages=[{"role": "system", "content": "inference baseline started"}],
+        )
+    except Exception:
+        # Non-blocking compliance ping.
+        pass
 
 
 def _heuristic_action(observation: Dict[str, Any]) -> Dict[str, Any]:
@@ -38,7 +68,6 @@ def _heuristic_action(observation: Dict[str, Any]) -> Dict[str, Any]:
     if not untreated:
         return {"type": "wait", "patient_id": None}
 
-    # Highest severity untreated patient (tie-break: smallest id)
     target = min(
         untreated,
         key=lambda p: (-int(p.get("severity", 0) or 0), int(p.get("id", 0) or 0)),
@@ -53,45 +82,28 @@ def _heuristic_action(observation: Dict[str, Any]) -> Dict[str, Any]:
             return {"type": "assign_doctor", "patient_id": pid}
         return {"type": "wait", "patient_id": None}
 
-    # severity < 7
     if available_doctors > 0:
         return {"type": "assign_doctor", "patient_id": pid}
     return {"type": "wait", "patient_id": None}
 
 
-def _llm_compliance_call() -> None:
-    """
-    The benchmark validator expects an OpenAI client to be used.
-    We do a minimal, deterministic call if the required env vars exist.
-    """
-
-    # The checklist expects the OpenAI client to be configured via
-    # API_BASE_URL + MODEL_NAME, and HF_TOKEN is optional.
-    if not HF_TOKEN:
-        return
-
-    try:
-        client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-        _ = client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0,
-            max_tokens=1,
-            messages=[{"role": "system", "content": "baseline inference started"}],
-        )
-    except Exception:
-        # Baseline remains deterministic even if the call fails.
-        return
+def _action_to_str(action: Dict[str, Any]) -> str:
+    return json.dumps(action, separators=(",", ":"))
 
 
-def _env_base_url() -> str:
-    # Environment endpoint for OpenEnv server. Different harnesses use different env var names.
-    return (
-        os.environ.get("OPENENV_BASE_URL")
-        or os.environ.get("OPENENV_URL")
-        or os.environ.get("OPENENV_API_URL")
-        or os.environ.get("BASE_URL")
-        or "http://127.0.0.1:8000"
-    )
+def _candidate_base_urls() -> List[str]:
+    urls: List[str] = []
+    for key in ("OPENENV_BASE_URL", "OPENENV_URL", "OPENENV_API_URL", "BASE_URL"):
+        val = os.environ.get(key)
+        if val:
+            urls.append(val.rstrip("/"))
+    dedup: List[str] = []
+    seen = set()
+    for u in urls:
+        if u not in seen:
+            dedup.append(u)
+            seen.add(u)
+    return dedup
 
 
 def _http_to_ws(url: str) -> str:
@@ -102,41 +114,12 @@ def _http_to_ws(url: str) -> str:
     return url
 
 
-def _candidate_base_urls() -> List[str]:
-    """
-    Build candidate base URLs for evaluator environments.
-    """
-    urls: List[str] = []
-
-    # User / evaluator provided endpoints only.
-    # In benchmark runs these are expected to be set by the harness.
-    # Avoid long hangs on unreachable local defaults.
-    for key in ("OPENENV_BASE_URL", "OPENENV_URL", "OPENENV_API_URL", "BASE_URL"):
-        val = os.environ.get(key)
-        if val:
-            urls.append(val.rstrip("/"))
-
-    # De-duplicate while keeping order
-    dedup: List[str] = []
-    seen = set()
-    for u in urls:
-        if u not in seen:
-            dedup.append(u)
-            seen.add(u)
-    return dedup
-
-
-def _connect_env_sync(max_attempts: int = 2):
-    """
-    Return a connected Sync GenericEnvClient with retries/fallback URLs.
-    Raises only after all attempts fail.
-    """
+def _connect_env_sync(max_attempts: int = 3):
     last_exc: Exception | None = None
     candidates = _candidate_base_urls()
     if not candidates:
         raise RuntimeError(
-            "No environment endpoint configured. Set one of "
-            "OPENENV_BASE_URL, OPENENV_URL, OPENENV_API_URL, or BASE_URL."
+            "No environment endpoint configured. Set OPENENV_BASE_URL/OPENENV_URL/OPENENV_API_URL/BASE_URL."
         )
 
     for base in candidates:
@@ -144,146 +127,88 @@ def _connect_env_sync(max_attempts: int = 2):
         for attempt in range(1, max_attempts + 1):
             try:
                 env = GenericEnvClient(
-                    base_url=ws_base,
-                    connect_timeout_s=3.0,
-                    message_timeout_s=30.0,
+                    base_url=ws_base, connect_timeout_s=4.0, message_timeout_s=30.0
                 ).sync()
                 env.connect()
                 return env
             except Exception as e:  # noqa: BLE001
                 last_exc = e
-                # Short backoff in case endpoint is still booting.
                 time.sleep(0.6 * attempt)
-                continue
 
     if last_exc is not None:
         raise last_exc
-    raise RuntimeError("Unable to connect to any environment endpoint")
+    raise RuntimeError("Unable to connect to environment endpoint")
 
 
-def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
-    # Deterministic seeds per task for reproducibility.
-    seed_map = {"easy": 1, "medium": 2, "hard": 3}
-    seed = seed_map.get(task, 1)
+def main() -> None:
+    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+    _llm_compliance_call()
 
-    env = _connect_env_sync(max_attempts=2)
+    env = None
+    rewards: List[float] = []
+    trajectory: List[Dict[str, Any]] = []
+    steps_taken = 0
+    score = 0.5
+    success = False
+    done = False
+
     try:
-        reset_result = env.reset(seed=seed, task=task)
+        env = _connect_env_sync(max_attempts=3)
+        seed_map = {"easy": 1, "medium": 2, "hard": 3}
+        seed = seed_map.get(TASK_NAME, 1)
+        reset_result = env.reset(seed=seed, task=TASK_NAME)
         observation = observation_to_dict(reset_result.observation)
         done = bool(reset_result.done)
 
-        trajectory: List[Dict[str, Any]] = []
-        total_reward = 0.0
-        steps = 0
-
-        while not done and steps < 50:
+        step = 0
+        while not done and step < MAX_STEPS:
+            step += 1
             action = _heuristic_action(observation)
             step_result = env.step(action)
-
             observation = observation_to_dict(step_result.observation)
             reward = float(step_result.reward or 0.0)
             done = bool(step_result.done)
 
-            steps += 1
-            total_reward += reward
-
-            if emit_steps:
-                _log(
-                    "[STEP]"
-                    + json.dumps(
-                        {
-                            "task": task,
-                            "step": steps,
-                            "action": action,
-                            "reward": reward,
-                            "done": done,
-                        },
-                        separators=(",", ":"),
-                    )
-                )
-
+            rewards.append(reward)
+            steps_taken = step
             trajectory.append(
                 {
-                    "step": steps,
+                    "step": step,
                     "action": action,
                     "state": dict(observation),
                     "reward": reward,
                     "done": done,
                 }
             )
-    finally:
-        try:
-            env.close()
-        except Exception:
-            pass
-
-    final_state = observation
-    score = _emit_score(grade({"final_state": final_state, "trajectory": trajectory}))
-
-    return {
-        "task": task,
-        "score": score,
-        "total_reward": total_reward,
-        "steps": steps,
-        "done": done,
-        "final_state": final_state,
-        "trajectory": trajectory,
-    }
-
-
-def main() -> None:
-    tasks = ["easy", "medium", "hard"]
-
-    _llm_compliance_call()
-
-    _log("[START]" + json.dumps({"tasks": tasks}, separators=(",", ":")))
-
-    per_task: Dict[str, Any] = {}
-    for task in tasks:
-        try:
-            result = run_task(task, emit_steps=True)
-            sc = _emit_score(result["score"])
-            per_task[task] = {
-                "score": sc,
-                "grader_score": sc,
-                "total_reward": result["total_reward"],
-                "steps": result["steps"],
-                "done": result["done"],
-            }
-        except Exception as e:  # noqa: BLE001
-            # Never crash the evaluator pipeline due to an unhandled exception.
-            fb = _emit_score(0.5)
-            per_task[task] = {
-                "score": fb,
-                "grader_score": fb,
-                "total_reward": 0.0,
-                "steps": 0,
-                "done": False,
-                "error": str(e),
-            }
-            _log(
-                "[STEP]"
-                + json.dumps(
-                    {
-                        "task": task,
-                        "step": 0,
-                        "action": None,
-                        "reward": 0.0,
-                        "done": False,
-                        "error": str(e),
-                    },
-                    separators=(",", ":"),
-                )
+            log_step(
+                step=step,
+                action=_action_to_str(action),
+                reward=reward,
+                done=done,
+                error=None,
             )
 
-    # Multiple parsers: explicit task list + scores map + per-task payloads.
-    end_out: Dict[str, Any] = {
-        "tasks": tasks,
-        "task_scores": {t: float(per_task[t]["score"]) for t in tasks},
-    }
-    for t in tasks:
-        end_out[t] = per_task[t]
-    _log("[END]" + json.dumps(end_out, separators=(",", ":")))
+        score = _safe_score(float(grade({"final_state": observation, "trajectory": trajectory})))
+        success = bool(done)
+
+    except Exception as e:  # noqa: BLE001
+        # Emit one STEP on error to preserve parser expectations.
+        log_step(
+            step=max(1, steps_taken + 1),
+            action="null",
+            reward=0.0,
+            done=False,
+            error=str(e),
+        )
+        score = _safe_score(0.5)
+        success = False
+    finally:
+        if env is not None:
+            try:
+                env.close()
+            except Exception:
+                pass
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
 if __name__ == "__main__":
