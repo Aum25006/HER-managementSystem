@@ -1,12 +1,40 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Mapping
 
-EPS = 1e-6
+EPS = 1e-4
+
+
+def _as_mapping(obj: Any) -> Dict[str, Any]:
+    """Coerce OpenEnv/Pydantic observations into plain dicts for grading."""
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    model_dump = getattr(obj, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    legacy_dict = getattr(obj, "dict", None)
+    if callable(legacy_dict):
+        dumped = legacy_dict()
+        if isinstance(dumped, dict):
+            return dumped
+    if isinstance(obj, Mapping):
+        return dict(obj)
+    raise TypeError(f"Cannot coerce observation to dict: {type(obj)!r}")
 
 
 def _extract_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    patients = state.get("patients", [])
+    patients_raw = state.get("patients", []) or []
+    patients: List[Dict[str, Any]] = []
+    for p in patients_raw:
+        try:
+            patients.append(_as_mapping(p))
+        except TypeError:
+            continue
+
     treated = [p for p in patients if p.get("treated")]
     untreated = [p for p in patients if not p.get("treated")]
 
@@ -40,23 +68,24 @@ def grade(result: Any) -> float:
         if not result:
             return 0.5
         trajectory = result
-        final_state = trajectory[-1].get("state", {})
+        final_state = _as_mapping(trajectory[-1].get("state", {}))
     elif isinstance(result, dict):
         # Common wrapper formats from inference scripts / evaluators
         if "final_state" in result:
-            final_state = result.get("final_state", {})
+            final_state = _as_mapping(result.get("final_state"))
             maybe_traj = result.get("trajectory") or []
             if isinstance(maybe_traj, list):
                 trajectory = maybe_traj
         elif "trajectory" in result and isinstance(result.get("trajectory"), list):
             maybe_traj = result.get("trajectory", [])
             trajectory = maybe_traj
-            final_state = maybe_traj[-1].get("state", {}) if maybe_traj else {}
-        elif "state" in result and isinstance(result.get("state"), dict):
+            final_ls = maybe_traj[-1].get("state", {}) if maybe_traj else {}
+            final_state = _as_mapping(final_ls)
+        elif "state" in result:
             # Sometimes evaluators wrap as {"state": ..., "reward": ..., "done": ...}
-            final_state = result.get("state", {})
+            final_state = _as_mapping(result.get("state"))
         else:
-            final_state = result
+            final_state = _as_mapping(result)
     else:
         raise ValueError("Unsupported result type for grading")
 
@@ -124,5 +153,20 @@ def grade(result: Any) -> float:
     return max(EPS, min(1.0 - EPS, final_score))
 
 
-__all__ = ["grade"]
+def grade_easy(result: Any) -> float:
+    """Task-specific grader hook (easy); same rubric, distinct entrypoint for validators."""
+    return grade(result)
+
+
+def grade_medium(result: Any) -> float:
+    """Task-specific grader hook (medium)."""
+    return grade(result)
+
+
+def grade_hard(result: Any) -> float:
+    """Task-specific grader hook (hard)."""
+    return grade(result)
+
+
+__all__ = ["grade", "grade_easy", "grade_medium", "grade_hard"]
 

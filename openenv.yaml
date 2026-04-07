@@ -68,10 +68,13 @@ tasks:
   easy:
     description: "Treat highest severity patients first."
     objective: "Always select the highest severity untreated patient."
+    grader: "grader:grade_easy"
   medium:
     description: "Manage doctors and ICU beds effectively."
     objective: "Balance use of doctors and ICU beds while prioritizing critical patients."
+    grader: "grader:grade_medium"
   hard:
     description: "Optimize wait time, prioritization, and resource efficiency."
     objective: "Minimize average wait time while maximizing overall reward."
+    grader: "grader:grade_hard"
 
