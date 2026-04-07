@@ -94,21 +94,13 @@ def _candidate_base_urls() -> List[str]:
     """
     urls: List[str] = []
 
-    # User / evaluator provided endpoints first.
+    # User / evaluator provided endpoints only.
+    # In benchmark runs these are expected to be set by the harness.
+    # Avoid long hangs on unreachable local defaults.
     for key in ("OPENENV_BASE_URL", "OPENENV_URL", "OPENENV_API_URL", "BASE_URL"):
         val = os.environ.get(key)
         if val:
             urls.append(val.rstrip("/"))
-
-    # Common local defaults used by validators/runtimes.
-    urls.extend(
-        [
-            "http://127.0.0.1:8000",
-            "http://localhost:8000",
-            "http://127.0.0.1:7860",
-            "http://localhost:7860",
-        ]
-    )
 
     # De-duplicate while keeping order
     dedup: List[str] = []
@@ -127,6 +119,11 @@ def _connect_env_sync(max_attempts: int = 2):
     """
     last_exc: Exception | None = None
     candidates = _candidate_base_urls()
+    if not candidates:
+        raise RuntimeError(
+            "No environment endpoint configured. Set one of "
+            "OPENENV_BASE_URL, OPENENV_URL, OPENENV_API_URL, or BASE_URL."
+        )
 
     for base in candidates:
         ws_base = _http_to_ws(base)
