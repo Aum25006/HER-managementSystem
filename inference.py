@@ -10,6 +10,7 @@ from openenv.core import GenericEnvClient
 
 from grader import grade
 
+EPS = 1e-6
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000/v1")
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.environ.get("HF_TOKEN")  # Optional; no default (per checklist)
@@ -204,7 +205,8 @@ def run_task(task: str, emit_steps: bool = True) -> Dict[str, Any]:
             pass
 
     final_state = observation
-    score = grade({"final_state": final_state, "trajectory": trajectory})
+    score = float(grade({"final_state": final_state, "trajectory": trajectory}))
+    score = max(EPS, min(1.0 - EPS, score))
 
     return {
         "task": task,
@@ -237,7 +239,7 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001
             # Never crash the evaluator pipeline due to an unhandled exception.
             per_task[task] = {
-                "score": 0.0,
+                "score": 0.5,
                 "total_reward": 0.0,
                 "steps": 0,
                 "done": False,

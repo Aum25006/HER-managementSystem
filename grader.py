@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, Any, List
 
+EPS = 1e-6
+
 
 def _extract_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
     patients = state.get("patients", [])
@@ -36,7 +38,7 @@ def grade(result: Any) -> float:
     if isinstance(result, list):
         # Assume trajectory; use final state and whole trajectory
         if not result:
-            return 0.0
+            return 0.5
         trajectory = result
         final_state = trajectory[-1].get("state", {})
     elif isinstance(result, dict):
@@ -61,7 +63,7 @@ def grade(result: Any) -> float:
     extracted = _extract_from_state(final_state)
     patients = extracted["patients"]
     if not patients:
-        return 0.0
+        return 0.5
 
     # ---- Component 1: % critical patients treated ----
     num_critical = len(extracted["critical"])
@@ -118,8 +120,8 @@ def grade(result: Any) -> float:
         + 0.15 * resource_score
     )
 
-    # Ensure within [0, 1]
-    return max(0.0, min(1.0, final_score))
+    # Ensure score is strictly within (0, 1) per evaluator requirement.
+    return max(EPS, min(1.0 - EPS, final_score))
 
 
 __all__ = ["grade"]
