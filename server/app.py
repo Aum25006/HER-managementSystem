@@ -5,7 +5,7 @@ import os
 from openenv.core.env_server.http_server import create_app
 
 from models import HospitalAction, HospitalObservation
-from server.my_environment import HospitalEnvironment
+from server.openenv_wrapper.hospital_openenv_wrapper import HospitalEnvironment
 
 
 def create_hospital_env() -> HospitalEnvironment:

@@ -16,16 +16,16 @@ The environment exposes the standard OpenEnv-style loop: `reset()` -> `state()` 
 
 - OpenEnv-compliant server (typed action/observation + OpenEnv FastAPI server)
   - `server/app.py`
-  - `server/my_environment.py`
+  - `server/openenv_wrapper/hospital_openenv_wrapper.py`
   - `models.py`
 - ER simulation logic
-  - `hospital_env.py`
+  - `server/hospital_environment.py`
 - Reward grading
-  - `grader.py`
-- Baseline inference script (runs an episode end-to-end on the environment)
-  - `baseline_inference.py`
+  - `server/services/grader.py`
+- Baseline inference scripts
+  - `client_notebooks/baseline_inference.py`
 - Simple web UI (optional, for manual testing only)
-  - `app.py` + `static/index.html`
+  - `server/flask_app_legacy.py` + `static/index.html`
 
 ## Requirements
 
@@ -66,21 +66,21 @@ openenv validate --verbose
 ### 4. Run baseline
 
 ```bash
-python inference.py
+python client_notebooks/inference.py
 ```
 
 For manual baseline runs:
 
 ```bash
-python baseline_inference.py easy
-python baseline_inference.py medium
-python baseline_inference.py hard
+python client_notebooks/baseline_inference.py easy
+python client_notebooks/baseline_inference.py medium
+python client_notebooks/baseline_inference.py hard
 ```
 
 ## Optional: Run the simple UI (manual testing only)
 
 ```bash
-python app.py
+python server/flask_app_legacy.py
 ```
 
 Open: `http://127.0.0.1:5000`

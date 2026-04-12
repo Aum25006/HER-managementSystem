@@ -3,10 +3,10 @@ from __future__ import annotations
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-from hospital_env import make_env, TASKS
-from grader import grade
+from server.hospital_environment import make_env, TASKS
+from server.services.grader import grade
 
-app = Flask(__name__, static_folder="static", static_url_path="/static")
+app = Flask(__name__, static_folder="../static", static_url_path="/static")
 CORS(app)
 
 # Global environment instance for simplicity
@@ -20,7 +20,7 @@ last_done = False
 @app.route("/")
 def index():
     # Serve the simple UI
-    return send_from_directory("static", "index.html")
+    return send_from_directory("../static", "index.html")
 
 
 @app.route("/state", methods=["GET"])
