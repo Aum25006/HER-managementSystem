@@ -1,135 +1,93 @@
 ---
-title: OpenEnv ER Decision Environment
-emoji: 🌍
-colorFrom: purple
-colorTo: green
+title: Hospital ER Management Environment
+emoji: 🏥
+colorFrom: red
+colorTo: blue
 sdk: docker
 pinned: false
 ---
 
-# OpenEnv Environment: Emergency Decision Optimization
+# 🏥 Hospital ER Management Environment (OpenEnv)
 
-This project implements a **real-world OpenEnv-compatible environment** where an agent learns to make optimal decisions in a dynamic system using reward-based feedback.
-
-The environment follows the standard OpenEnv interaction loop:
-
-reset() → state → action → step() → reward → new state → done
+A production-grade **decision-optimization environment** built for the OpenEnv benchmark. This repository simulates a high-pressure Emergency Room where an AI agent must manage limited resources (Doctors and ICU beds) to stabilize and treat patients based on medical priority.
 
 ---
 
-## 🧠 Problem
+## 🚀 Quick Start
 
-In many real-world systems, decisions must be made under constraints (limited resources, time pressure, prioritization).
-
-This environment simulates such a scenario, allowing an AI agent to learn how to optimize decisions over time.
-
----
-
-## ⚙️ Environment Design
-
-### 🔹 State (Observation)
-
-The environment state includes:
-
-* patients with:
-
-  * severity (priority level)
-  * wait_time
-  * treated status
-* available doctors
-* ICU beds
-
----
-
-### 🔹 Actions
-
-The agent can take one of the following actions:
-
-* `assign_doctor` → treat a patient
-* `move_to_icu` → prioritize critical patient
-* `wait` → delay all actions
-
----
-
-### 🔹 Reward Function
-
-The reward is designed to guide intelligent decision-making:
-
-* Positive reward for treating high-severity patients
-* Negative reward for:
-
-  * delays (high wait_time)
-  * incorrect prioritization
-* Bonus for efficient resource usage
-
-👉 This ensures the agent learns optimal prioritization strategies.
-
----
-
-## 🎯 Objective
-
-The goal of the agent is to:
-
-> Maximize total reward by prioritizing critical tasks, minimizing delays, and using resources efficiently.
-
----
-
-## 🔁 OpenEnv Workflow
-
-The agent interacts with the environment as follows:
-
-1. `reset()` → initialize environment
-2. `state()` → observe current state
-3. choose action
-4. `step(action)` → receive reward and next state
-5. repeat until `done`
-
----
-
-## 🧪 Tasks
-
-The environment defines three difficulty levels:
-
-* **easy** → prioritize high-severity patients
-* **medium** → manage resources effectively
-* **hard** → optimize full system (priority + delay + efficiency)
-
-Each task is evaluated using a grader that returns a score strictly between (0, 1).
-
----
-
-## 🤖 Inference (Agent Execution)
-
-To evaluate the agent's performance, ensure the environment server is running, then execute the inference script:
-
+### 1. Local Development
+Clone the repository and install dependencies:
 ```bash
-# Set your local or remote API URL
+pip install -r requirements.txt
+```
+
+### 2. Start the Environment Server
+The environment runs as a FastAPI-based server:
+```bash
+export PORT=8000
+uvicorn server.app:app --host 0.0.0.0 --port 8000
+```
+
+### 3. Run the Evaluation Agent
+In a separate terminal, execute the inference script to test the environment:
+```bash
 export OPENENV_URL="http://127.0.0.1:8000"
+export HF_TOKEN="your_huggingface_token"
 python inference.py
 ```
 
-This script connects to the environment server via WebSockets, executes the agent's heuristic policy, and outputs a formatted trajectory for the grader.
+---
+
+## 🧠 Core Logic & Simulation
+
+The environment logic is encapsulated in `hospital_env.py`. It is designed as a **stochastic state machine** where time (steps) increases patient wait times and severity risk.
+
+### 🔹 Resource Management
+*   **Doctors**: Consumed by `assign_doctor` actions. Replenish over time as patients are treated.
+*   **ICU Beds**: Mandatory for critical patients (Severity ≥ 8). Limited capacity requires strategic allocation.
+
+### 🔹 Reward Function & Scoring
+The agent is graded on a strict **(0, 1) scale** based on four weighted components:
+1.  **Critical Life-Saving (40%)**: Percentage of severity 8-10 patients treated.
+2.  **Wait Time Efficiency (25%)**: Minimizing the average time patients spend untreated.
+3.  **Prioritization (20%)**: Penalties for treating low-severity cases while critical ones wait.
+4.  **Resource Utilization (15%)**: Rewarding active interventions over idle 'wait' actions.
 
 ---
 
-## ⚠️ Notes
+## 🛠 Repository Structure
 
-* This is a **production-spec OpenEnv environment**
-* It uses a **FastAPI-based server** for agent interactions
-* Supports standard `openenv validate` and `openenv run` commands
+```text
+.
+├── server/
+│   ├── app.py              # FastAPI Server Entrypoint
+│   └── openenv_wrapper/    # OpenEnv API Adapter
+├── hospital_env.py         # The "Brain" (Core Simulation Logic)
+├── grader.py               # Evaluation & Scoring Rubric
+├── inference.py            # Phase 2 Agent (WebSocket + HF Token)
+├── models.py               # Pydantic Schemas for Actions/Observations
+├── openenv.yaml            # Environment Specification
+└── Dockerfile              # Deployment Configuration
+```
 
 ---
 
-## 📦 Structure
+## 📡 Architecture: No-HTTP WebSocket Protocol
 
-* `hospital_env.py` → environment logic
-* `grader.py` → evaluation
-* `inference.py` → agent simulation
-* `openenv.yaml` → environment specification
-* `Dockerfile` → deployment
+To ensure high performance and stateful persistence, this environment utilizes **WebSockets (WS)** for agent-environment interaction.
+*   **Stateless Initialization**: The environment is configured via `openenv.yaml`.
+*   **Persistent Episode**: Once a WebSocket connection is established, the session maintains state across all `step()` calls, satisfying the "No-Stateless-HTTP" requirement for Phase 2.
+
+---
+
+## 🎯 Evaluation Tasks
+
+This environment provides three standardized tasks for automated benchmarking:
+*   **Easy**: Standard prioritization of high-severity patients.
+*   **Medium**: Resource-constrained management (Lower doctor/bed ratio).
+*   **Hard**: High-traffic simulation requiring optimal wait-time balancing.
 
 ---
 
 ## 🏁 Goal
-
-This project demonstrates how real-world decision systems can be modeled as learning environments for AI agents using reward-based optimization.
+This project demonstrates the ability to model complex, real-world resource constraints as a standardized AI training environment. It is fully compliant with the **OpenEnv Phase 2** specification.
