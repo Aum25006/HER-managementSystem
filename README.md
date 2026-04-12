@@ -1,12 +1,11 @@
 ---
-
 title: OpenEnv ER Decision Environment
 emoji: 🌍
 colorFrom: purple
 colorTo: green
 sdk: docker
 pinned: false
--------------
+---
 
 # OpenEnv Environment: Emergency Decision Optimization
 
