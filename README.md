@@ -23,7 +23,7 @@ The environment exposes the standard OpenEnv-style loop: `reset()` -> `state()` 
 - Reward grading
   - `server/services/grader.py`
 - Baseline inference scripts
-  - `client_notebooks/baseline_inference.py`
+  - `baseline_inference.py`
 - Simple web UI (optional, for manual testing only)
   - `server/flask_app_legacy.py` + `static/index.html`
 
@@ -66,15 +66,15 @@ openenv validate --verbose
 ### 4. Run baseline
 
 ```bash
-python client_notebooks/inference.py
+python inference.py
 ```
 
 For manual baseline runs:
 
 ```bash
-python client_notebooks/baseline_inference.py easy
-python client_notebooks/baseline_inference.py medium
-python client_notebooks/baseline_inference.py hard
+python baseline_inference.py easy
+python baseline_inference.py medium
+python baseline_inference.py hard
 ```
 
 ## Optional: Run the simple UI (manual testing only)
