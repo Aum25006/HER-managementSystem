@@ -100,21 +100,23 @@ Each task is evaluated using a grader that returns a score strictly between (0, 
 
 ## 🤖 Inference (Agent Execution)
 
-Run the baseline agent:
+To evaluate the agent's performance, ensure the environment server is running, then execute the inference script:
 
 ```bash
+# Set your local or remote API URL
+export OPENENV_URL="http://127.0.0.1:8000"
 python inference.py
 ```
 
-This script interacts directly with the environment (no API calls) and simulates agent behavior.
+This script connects to the environment server via WebSockets, executes the agent's heuristic policy, and outputs a formatted trajectory for the grader.
 
 ---
 
 ## ⚠️ Notes
 
-* This is a **pure OpenEnv environment**
-* No UI or API is required for evaluation
-* The system is fully self-contained for agent interaction
+* This is a **production-spec OpenEnv environment**
+* It uses a **FastAPI-based server** for agent interactions
+* Supports standard `openenv validate` and `openenv run` commands
 
 ---
 
