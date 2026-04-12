@@ -3,8 +3,8 @@ from __future__ import annotations
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-from server.hospital_environment import make_env, TASKS
-from server.services.grader import grade
+from hospital_env import make_env, TASKS
+from grader import grade
 
 app = Flask(__name__, static_folder="../static", static_url_path="/static")
 CORS(app)

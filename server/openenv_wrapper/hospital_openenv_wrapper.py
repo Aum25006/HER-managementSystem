@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
-from server.hospital_environment import HospitalEnv
+from hospital_env import HospitalEnv
 from models import HospitalAction, HospitalObservation
 
 

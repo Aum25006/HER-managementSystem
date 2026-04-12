@@ -19,9 +19,9 @@ The environment exposes the standard OpenEnv-style loop: `reset()` -> `state()` 
   - `server/openenv_wrapper/hospital_openenv_wrapper.py`
   - `models.py`
 - ER simulation logic
-  - `server/hospital_environment.py`
+  - `hospital_env.py`
 - Reward grading
-  - `server/services/grader.py`
+  - `grader.py`
 - Baseline inference scripts
   - `baseline_inference.py`
 - Simple web UI (optional, for manual testing only)
